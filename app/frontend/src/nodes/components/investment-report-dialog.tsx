@@ -26,6 +26,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { extractBaseAgentKey } from '@/data/node-mappings';
+import { createAgentDisplayNames } from '@/utils/text-utils';
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -34,16 +36,27 @@ interface InvestmentReportDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   outputNodeData: any;
+  connectedAgentIds: Set<string>;
 }
 
 type ActionType = 'long' | 'short' | 'hold';
 
-export function InvestmentReportDialog({ 
-  isOpen, 
-  onOpenChange, 
-  outputNodeData 
+export function InvestmentReportDialog({
+  isOpen,
+  onOpenChange,
+  outputNodeData,
+  connectedAgentIds,
 }: InvestmentReportDialogProps) {
-  if (!outputNodeData) return null;
+  // Check if this is a backtest result and return early if it is
+  // Backtest results should be displayed in the backtest output tab, not in the investment report dialog
+  if (outputNodeData?.decisions?.backtest?.type === 'backtest_complete') {
+    return null;
+  }
+
+  // Return early if no output data
+  if (!outputNodeData || !outputNodeData.decisions) {
+    return null;
+  }
 
   const getActionIcon = (action: ActionType) => {
     switch (action) {
@@ -59,9 +72,9 @@ export function InvestmentReportDialog({
   };
 
   const getSignalBadge = (signal: string) => {
-    const variant = signal === 'bullish' ? 'success' : 
+    const variant = signal === 'bullish' ? 'success' :
                    signal === 'bearish' ? 'destructive' : 'outline';
-    
+
     return (
       <Badge variant={variant as any}>
         {signal}
@@ -84,10 +97,15 @@ export function InvestmentReportDialog({
 
   // Extract unique tickers from the data
   const tickers = Object.keys(outputNodeData.decisions || {});
-  
-  // Extract unique agents from analyst signals, excluding risk_management_agent
+
+  // Use the unique node IDs directly since they're now stored as keys in analyst_signals
+  const connectedUniqueAgentIds = Array.from(connectedAgentIds);
   const agents = Object.keys(outputNodeData.analyst_signals || {})
-    .filter(agent => agent !== 'risk_management_agent');
+    .filter(agent =>
+      extractBaseAgentKey(agent) !== 'risk_management_agent' && connectedUniqueAgentIds.includes(agent)
+    );
+
+  const agentDisplayNames = createAgentDisplayNames(agents);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -95,7 +113,7 @@ export function InvestmentReportDialog({
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Investment Report</DialogTitle>
         </DialogHeader>
-        
+
         <div className="space-y-8 my-4">
           {/* Summary Section */}
           <section>
@@ -115,13 +133,12 @@ export function InvestmentReportDialog({
                       <TableHead>Action</TableHead>
                       <TableHead>Quantity</TableHead>
                       <TableHead>Confidence</TableHead>
-                      <TableHead>Reasoning</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {tickers.map(ticker => {
                       const decision = outputNodeData.decisions[ticker];
-                      const currentPrice = outputNodeData.analyst_signals.risk_management_agent?.[ticker]?.current_price || 'N/A';
+                      const currentPrice = outputNodeData.current_prices?.[ticker] || 'N/A';
                       return (
                         <TableRow key={ticker}>
                           <TableCell className="font-medium">{ticker}</TableCell>
@@ -134,29 +151,6 @@ export function InvestmentReportDialog({
                           </TableCell>
                           <TableCell>{decision.quantity}</TableCell>
                           <TableCell>{getConfidenceBadge(decision.confidence)}</TableCell>
-                          <TableCell className="max-w-sm">
-                            {typeof decision.reasoning === 'string' ? (
-                              <p className="text-xs text-muted-foreground hover:line-clamp-none">
-                                {decision.reasoning}
-                              </p>
-                            ) : (
-                              <div className="max-h-32 overflow-y-auto">
-                                <SyntaxHighlighter
-                                  language="json"
-                                  style={vscDarkPlus}
-                                  className="text-xs rounded-md"
-                                  customStyle={{
-                                    fontSize: '0.75rem',
-                                    margin: 0,
-                                    padding: '8px',
-                                    backgroundColor: 'hsl(var(--muted))',
-                                  }}
-                                >
-                                  {JSON.stringify(decision.reasoning, null, 2)}
-                                </SyntaxHighlighter>
-                              </div>
-                            )}
-                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -189,13 +183,13 @@ export function InvestmentReportDialog({
                         {agents.map(agent => {
                           const signal = outputNodeData.analyst_signals[agent]?.[ticker];
                           if (!signal) return null;
-                          
+
                           return (
                             <Card key={agent} className="overflow-hidden">
                               <CardHeader className="bg-muted/50 pb-3">
                                 <div className="flex items-center justify-between">
-                                  <CardTitle className="text-base capitalize">
-                                    {agent.replace(/_/g, ' ')}
+                                  <CardTitle className="text-base">
+                                    {agentDisplayNames.get(agent) || agent}
                                   </CardTitle>
                                   <div className="flex items-center gap-2">
                                     {getSignalBadge(signal.signal)}

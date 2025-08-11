@@ -11,20 +11,18 @@ interface LeftSidebarProps {
   isCollapsed: boolean;
   onCollapse: () => void;
   onExpand: () => void;
-  onToggleCollapse: () => void;
   onWidthChange?: (width: number) => void;
 }
 
 export function LeftSidebar({
   isCollapsed,
-  onToggleCollapse,
   onWidthChange,
 }: LeftSidebarProps) {
   // Use our custom hooks
   const { width, isDragging, elementRef, startResize } = useResizable({
     defaultWidth: 280,
     minWidth: 200,
-    maxWidth: 500,
+    maxWidth: window.innerWidth * .90,
     side: 'left',
   });
 
@@ -58,19 +56,16 @@ export function LeftSidebar({
     <div 
       ref={elementRef}
       className={cn(
-        "h-full bg-panel flex flex-col relative pt-5",
+        "h-full bg-panel flex flex-col relative pt-5 border",
         isCollapsed ? "shadow-lg" : "",
-        isDragging ? "select-none" : ""
       )}
       style={{ 
-        width: `${width}px`,
-        borderRight: isDragging ? 'none' : '1px solid var(--ramp-grey-900)' 
+        width: `${width}px`
       }}
     >
       <FlowActions
         onSave={handleSaveCurrentFlow}
         onCreate={handleCreateNewFlow}
-        onToggleCollapse={onToggleCollapse}
       />
       
       <FlowList
